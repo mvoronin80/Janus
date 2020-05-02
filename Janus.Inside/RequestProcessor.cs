@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
+using System.Net.Http.Headers;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using System.Threading.Tasks;
@@ -52,7 +53,11 @@ namespace mikev.Janus.Inside
                 ResponseInfo responseInfo = new ResponseInfo();
                 String body = await httpResponseFromDocuSign.Content.ReadAsStringAsync();
                 logger.LogInformation($"Request {requestInfo.RequestId} to DocuSign body read");
-                responseInfo.Body = body;
+                if (configuration["ConvertBodyToRemoteAddress"] == true.ToString()) {
+                    responseInfo.Body = ConvertDocusingAddressToJanusAddess(requestInfo.RequestId, body, httpResponseFromDocuSign, configuration, logger);
+                } else {
+                    responseInfo.Body = body;
+                }
                 responseInfo.StatusCode = (Int32)httpResponseFromDocuSign.StatusCode;
                 responseInfo.RequestId = requestInfo.RequestId;
                 foreach(var header in httpResponseFromDocuSign.Headers) {
@@ -84,6 +89,18 @@ namespace mikev.Janus.Inside
                     httpResponseFromJanusOutside.Dispose();
             }
         }
+
+        private static String ConvertDocusingAddressToJanusAddess(String requestId, String body, HttpResponseMessage httpResponse, IConfiguration configuration, ILogger logger)
+        {
+            if (!httpResponse.Headers.Contains("Content-Type"))
+                return body;
+            String contentType = httpResponse.Headers.GetValues("Content-Type").First();
+            if ( contentType.Contains("json") ) {
+                logger.LogInformation($"Request {requestId} JSON body replaced");
+                return body.Replace(configuration["DocuSignBaseUrl"], configuration["JanusExternalBaseUrl"]);
+            }
+            return body;
+        } 
 
         public static HttpMethod StringToHttpMethod(String method) {
             if (HttpMethod.Delete.Method.Equals(method, StringComparison.InvariantCultureIgnoreCase)) {
